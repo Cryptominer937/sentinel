@@ -2,7 +2,7 @@
 
 An all-powerful toolset for Gravium.
 
-Sentinel is an autonomous agent for persisting, processing and automating Gravium V12.1 governance objects and tasks, and for expanded functions in the upcoming Gravium V13 release (Evolution).
+Sentinel is an autonomous agent for persisting, processing and automating Gravium governance objects and tasks.
 
 Sentinel is implemented as a Python application that binds to a local version 12.1 graviumd instance on each Gravium V12.1 Masternode.
 
