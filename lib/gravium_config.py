@@ -34,7 +34,7 @@ class GraviumConfig():
         creds = {key: value for (key, value) in match}
 
         # standard Gravium defaults...
-        default_port = 9998 if (network == 'mainnet') else 19998
+        default_port = 11000 if (network == 'mainnet') else 12000
 
         # use default port for network if not specified in gravium.conf
         if not ('port' in creds):
