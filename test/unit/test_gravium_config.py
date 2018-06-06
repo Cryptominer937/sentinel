@@ -14,7 +14,7 @@ def gravium_conf(**kwargs):
     defaults = {
         'rpcuser': 'graviumrpc',
         'rpcpassword': 'EwJeV3fZTyTVozdECF627BkBMnNDwQaVLakG3A4wXYyk',
-        'rpcport': 29241,
+        'rpcport': 11000,
     }
 
     # merge kwargs into defaults
@@ -41,7 +41,7 @@ def test_get_rpc_creds():
         assert key in creds
     assert creds.get('user') == 'graviumrpc'
     assert creds.get('password') == 'EwJeV3fZTyTVozdECF627BkBMnNDwQaVLakG3A4wXYyk'
-    assert creds.get('port') == 29241
+    assert creds.get('port') == 11000
 
     gravium_config = gravium_conf(rpcpassword='s00pers33kr1t', rpcport=8000)
     creds = GraviumConfig.get_rpc_creds(gravium_config, 'testnet')
@@ -59,7 +59,7 @@ def test_get_rpc_creds():
         assert key in creds
     assert creds.get('user') == 'graviumrpc'
     assert creds.get('password') == 'EwJeV3fZTyTVozdECF627BkBMnNDwQaVLakG3A4wXYyk'
-    assert creds.get('port') == 11000
+    assert creds.get('port') == 12000
 
 
 # ensure gravium network (mainnet, testnet) matches that specified in config
