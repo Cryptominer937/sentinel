@@ -4,9 +4,9 @@ An all-powerful toolset for Gravium.
 
 Sentinel is an autonomous agent for persisting, processing and automating Gravium governance objects and tasks.
 
-Sentinel is implemented as a Python application that binds to a local version 12.1 graviumd instance on each Gravium V12.1 Masternode.
+Sentinel is implemented as a Python application that binds to a local version graviumd instance on each Gravium Masternode.
 
-This guide covers installing Sentinel onto an existing 12.1 Masternode in Ubuntu 14.04 / 16.04.
+This guide covers installing Sentinel onto an existing Masternode in Ubuntu or Debian based distributions.
 
 ## Installation
 
@@ -21,7 +21,7 @@ Update system packages and ensure virtualenv is installed:
     $ sudo apt-get update
     $ sudo apt-get -y install python-virtualenv
 
-Make sure the local Gravium daemon running is at least version 12.1 (120100)
+Make sure the local Gravium daemon running is at least version  (1000200)
 
     $ gravium-cli getinfo | grep version
 
@@ -39,9 +39,9 @@ Set up a crontab entry to call Sentinel every minute:
 
     $ crontab -e
 
-In the crontab editor, add the lines below, replacing '/home/YOURUSERNAME/sentinel' to the path where you cloned sentinel to:
+In the crontab editor, add the lines below, replacing '~/sentinel' to the path where you cloned sentinel to:
 
-    * * * * * cd /home/YOURUSERNAME/sentinel && ./venv/bin/python bin/sentinel.py >/dev/null 2>&1
+    * * * * * cd ~/sentinel && ./venv/bin/python bin/sentinel.py >/dev/null 2>&1
 
 ### 4. Test the Configuration
 
