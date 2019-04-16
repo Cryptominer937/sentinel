@@ -3,27 +3,27 @@
 """
 import sys
 import os
-from gravium_config import GraviumConfig
+from hilux_config import HiluxConfig
 
 default_sentinel_config = os.path.normpath(
     os.path.join(os.path.dirname(__file__), '../sentinel.conf')
 )
 sentinel_config_file = os.environ.get('SENTINEL_CONFIG', default_sentinel_config)
-sentinel_cfg = GraviumConfig.tokenize(sentinel_config_file)
+sentinel_cfg = HiluxConfig.tokenize(sentinel_config_file)
 sentinel_version = "1.1.0"
-min_graviumd_proto_version_with_sentinel_ping = 70207
+min_hiluxd_proto_version_with_sentinel_ping = 70207
 
 
-def get_gravium_conf():
+def get_hilux_conf():
     home = os.environ.get('HOME')
 
-    gravium_conf = os.path.join(home, ".graviumcore/gravium.conf")
+    hilux_conf = os.path.join(home, ".hiluxcore/hilux.conf")
     if sys.platform == 'darwin':
-        gravium_conf = os.path.join(home, "Library/Application Support/GraviumCore/gravium.conf")
+        hilux_conf = os.path.join(home, "Library/Application Support/HiluxCore/hilux.conf")
 
-    gravium_conf = sentinel_cfg.get('gravium_conf', gravium_conf)
+    hilux_conf = sentinel_cfg.get('hilux_conf', hilux_conf)
 
-    return gravium_conf
+    return hilux_conf
 
 
 def get_network():
@@ -79,6 +79,6 @@ def get_db_conn():
     return db
 
 
-gravium_conf = get_gravium_conf()
+hilux_conf = get_hilux_conf()
 network = get_network()
 db = get_db_conn()

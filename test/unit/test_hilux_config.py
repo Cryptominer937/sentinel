@@ -6,13 +6,13 @@ os.environ['SENTINEL_CONFIG'] = os.path.normpath(os.path.join(os.path.dirname(__
 os.environ['SENTINEL_ENV'] = 'test'
 sys.path.append(os.path.normpath(os.path.join(os.path.dirname(__file__), '../../lib')))
 import config
-from gravium_config import GraviumConfig
+from hilux_config import HiluxConfig
 
 
 @pytest.fixture
-def gravium_conf(**kwargs):
+def hilux_conf(**kwargs):
     defaults = {
-        'rpcuser': 'graviumrpc',
+        'rpcuser': 'hiluxrpc',
         'rpcpassword': 'EwJeV3fZTyTVozdECF627BkBMnNDwQaVLakG3A4wXYyk',
         'rpcport': 11000,
     }
@@ -34,35 +34,35 @@ rpcport={rpcport}
 
 
 def test_get_rpc_creds():
-    gravium_config = gravium_conf()
-    creds = GraviumConfig.get_rpc_creds(gravium_config, 'testnet')
+    hilux_config = hilux_conf()
+    creds = HiluxConfig.get_rpc_creds(hilux_config, 'testnet')
 
     for key in ('user', 'password', 'port'):
         assert key in creds
-    assert creds.get('user') == 'graviumrpc'
+    assert creds.get('user') == 'hiluxrpc'
     assert creds.get('password') == 'EwJeV3fZTyTVozdECF627BkBMnNDwQaVLakG3A4wXYyk'
     assert creds.get('port') == 11000
 
-    gravium_config = gravium_conf(rpcpassword='s00pers33kr1t', rpcport=8000)
-    creds = GraviumConfig.get_rpc_creds(gravium_config, 'testnet')
+    hilux_config = hilux_conf(rpcpassword='s00pers33kr1t', rpcport=8000)
+    creds = HiluxConfig.get_rpc_creds(hilux_config, 'testnet')
 
     for key in ('user', 'password', 'port'):
         assert key in creds
-    assert creds.get('user') == 'graviumrpc'
+    assert creds.get('user') == 'hiluxrpc'
     assert creds.get('password') == 's00pers33kr1t'
     assert creds.get('port') == 8000
 
-    no_port_specified = re.sub('\nrpcport=.*?\n', '\n', gravium_conf(), re.M)
-    creds = GraviumConfig.get_rpc_creds(no_port_specified, 'testnet')
+    no_port_specified = re.sub('\nrpcport=.*?\n', '\n', hilux_conf(), re.M)
+    creds = HiluxConfig.get_rpc_creds(no_port_specified, 'testnet')
 
     for key in ('user', 'password', 'port'):
         assert key in creds
-    assert creds.get('user') == 'graviumrpc'
+    assert creds.get('user') == 'hiluxrpc'
     assert creds.get('password') == 'EwJeV3fZTyTVozdECF627BkBMnNDwQaVLakG3A4wXYyk'
     assert creds.get('port') == 12000
 
 
-# ensure gravium network (mainnet, testnet) matches that specified in config
-# requires running graviumd on whatever port specified...
+# ensure hilux network (mainnet, testnet) matches that specified in config
+# requires running hiluxd on whatever port specified...
 #
-# This is more of a graviumd/jsonrpc test than a config test...
+# This is more of a hiluxd/jsonrpc test than a config test...

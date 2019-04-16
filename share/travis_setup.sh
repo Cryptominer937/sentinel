@@ -1,9 +1,9 @@
 #!/bin/bash
 set -evx
 
-mkdir ~/.graviumcore
+mkdir ~/.hiluxcore
 
 # safety check
-if [ ! -f ~/.graviumcore/.gravium.conf ]; then
-  cp share/gravium.conf.example ~/.graviumcore/gravium.conf
+if [ ! -f ~/.hiluxcore/.hilux.conf ]; then
+  cp share/hilux.conf.example ~/.hiluxcore/hilux.conf
 fi

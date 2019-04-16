@@ -57,23 +57,23 @@ def is_database_correctly_configured():
     return configured
 
 
-def has_gravium_conf():
+def has_hilux_conf():
     import config
     import io
 
-    valid_gravium_conf = False
+    valid_hilux_conf = False
 
-    # ensure gravium_conf exists & readable
+    # ensure hilux_conf exists & readable
     #
-    # if not, print a message stating that Gravium Core must be installed and
-    # configured, including JSONRPC access in gravium.conf
+    # if not, print a message stating that Hilux Core must be installed and
+    # configured, including JSONRPC access in hilux.conf
     try:
-        f = io.open(config.gravium_conf)
-        valid_gravium_conf = True
+        f = io.open(config.hilux_conf)
+        valid_hilux_conf = True
     except IOError as e:
         print(e)
 
-    return valid_gravium_conf
+    return valid_hilux_conf
 
 
 # === begin main
@@ -95,8 +95,8 @@ def main():
         print("Please ensure correct database configuration.")
         sys.exit(1)
 
-    if not has_gravium_conf():
-        print("GraviumCore must be installed and configured, including JSONRPC access in gravium.conf")
+    if not has_hilux_conf():
+        print("HiluxCore must be installed and configured, including JSONRPC access in hilux.conf")
         sys.exit(1)
 
 

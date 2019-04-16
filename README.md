@@ -1,10 +1,10 @@
-# Gravium Sentinel
+# Hilux Sentinel
 
-An all-powerful toolset for Gravium.
+An all-powerful toolset for Hilux.
 
-Sentinel is an autonomous agent for persisting, processing and automating Gravium governance objects and tasks.
+Sentinel is an autonomous agent for persisting, processing and automating Hilux governance objects and tasks.
 
-Sentinel is implemented as a Python application that binds to a local version graviumd instance on each Gravium Masternode.
+Sentinel is implemented as a Python application that binds to a local version hiluxd instance on each Hilux Masternode.
 
 This guide covers installing Sentinel onto an existing Masternode in Ubuntu or Debian based distributions.
 
@@ -21,15 +21,15 @@ Update system packages and ensure virtualenv is installed:
     $ sudo apt-get update
     $ sudo apt-get -y install python-virtualenv
 
-Make sure the local Gravium daemon running is at least version  (1000200)
+Make sure the local Hilux daemon running is at least version  (1000200)
 
-    $ gravium-cli getinfo | grep version
+    $ hilux-cli getinfo | grep version
 
 ### 2. Install Sentinel
 
 Clone the Sentinel repo and install Python dependencies.
 
-    $ git clone https://github.com/Gravium/sentinel.git && cd sentinel
+    $ git clone https://github.com/Hilux/sentinel.git && cd sentinel
     $ virtualenv ./venv
     $ ./venv/bin/pip install -r requirements.txt
 
@@ -49,13 +49,13 @@ Test the config by runnings all tests from the sentinel folder you cloned into
 
     $ ./venv/bin/py.test ./test
 
-With all tests passing and crontab setup, Sentinel will stay in sync with graviumd and the installation is complete
+With all tests passing and crontab setup, Sentinel will stay in sync with hiluxd and the installation is complete
 
 ## Configuration
 
-An alternative (non-default) path to the `gravium.conf` file can be specified in `sentinel.conf`:
+An alternative (non-default) path to the `hilux.conf` file can be specified in `sentinel.conf`:
 
-    gravium_conf=/path/to/gravium.conf
+    hilux_conf=/path/to/hilux.conf
 
 ## Troubleshooting
 
@@ -65,4 +65,4 @@ To view debug output, set the `SENTINEL_DEBUG` environment variable to anything 
 
 ### License
 
-Released under the MIT license, under the same terms as GraviumCore itself. See [LICENSE](LICENSE) for more info.
+Released under the MIT license, under the same terms as HiluxCore itself. See [LICENSE](LICENSE) for more info.

@@ -7,11 +7,11 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'lib'))
 from misc import printdbg
 
 
-class GraviumConfig():
+class HiluxConfig():
 
     @classmethod
     def slurp_config_file(self, filename):
-        # read gravium.conf config but skip commented lines
+        # read hilux.conf config but skip commented lines
         f = io.open(filename)
         lines = []
         for line in f:
@@ -20,27 +20,27 @@ class GraviumConfig():
             lines.append(line)
         f.close()
 
-        # data is gravium.conf without commented lines
+        # data is hilux.conf without commented lines
         data = ''.join(lines)
 
         return data
 
     @classmethod
     def get_rpc_creds(self, data, network='mainnet'):
-        # get rpc info from gravium.conf
+        # get rpc info from hilux.conf
         match = re.findall(r'rpc(user|password|port)=(.*?)$', data, re.MULTILINE)
 
         # python >= 2.7
         creds = {key: value for (key, value) in match}
 
-        # standard Gravium defaults...
+        # standard Hilux defaults...
         default_port = 11000 if (network == 'mainnet') else 12000
 
-        # use default port for network if not specified in gravium.conf
+        # use default port for network if not specified in hilux.conf
         if not ('port' in creds):
             creds[u'port'] = default_port
 
-        # convert to an int if taken from gravium.conf
+        # convert to an int if taken from hilux.conf
         creds[u'port'] = int(creds[u'port'])
 
         # return a dictionary with RPC credential key, value pairs
