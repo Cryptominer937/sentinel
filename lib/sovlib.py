@@ -12,14 +12,14 @@ from misc import printdbg, epoch2str
 import time
 
 
-def is_valid_hilux_address(address, network='mainnet'):
+def is_valid_sov_address(address, network='mainnet'):
     # Only public key addresses are allowed
     # A valid address is a RIPEMD-160 hash which contains 20 bytes
     # Prior to base58 encoding 1 version byte is prepended and
     # 4 checksum bytes are appended so the total number of
     # base58 encoded bytes should be 25.  This means the number of characters
     # in the encoding should be about 34 ( 25 * log2( 256 ) / log2( 58 ) ).
-    hilux_version = 140 if network == 'testnet' else 76
+    sov_version = 140 if network == 'testnet' else 76
 
     # Check length (This is important because the base58 library has problems
     # with long addresses (which are invalid anyway).
@@ -32,10 +32,10 @@ def is_valid_hilux_address(address, network='mainnet'):
         decoded = base58.b58decode_chk(address)
         address_version = ord(decoded[0:1])
     except:
-        # rescue from exception, not a valid Hilux address
+        # rescue from exception, not a valid Sovereign address
         return False
 
-    if (address_version != hilux_version):
+    if (address_version != sov_version):
         return False
 
     return True
@@ -92,7 +92,7 @@ def parse_masternode_status_vin(status_vin_string):
     return vin
 
 
-def create_superblock(proposals, event_block_height, budget_max, sb_epoch_time):
+def create_superblock(proposals, event_block_height, budget_max, sb_epoch_time, maxgovobjdatasize):
     from models import Superblock, GovernanceObject, Proposal
     from constants import SUPERBLOCK_FUDGE_WINDOW
 
@@ -102,9 +102,10 @@ def create_superblock(proposals, event_block_height, budget_max, sb_epoch_time):
         return None
 
     budget_allocated = Decimal(0)
-    fudge = SUPERBLOCK_FUDGE_WINDOW  # fudge-factor to allow for slighly incorrect estimates
+    fudge = SUPERBLOCK_FUDGE_WINDOW  # fudge-factor to allow for slightly incorrect estimates
 
     payments = []
+
     for proposal in proposals:
         fmt_string = "name: %s, rank: %4d, hash: %s, amount: %s <= %s"
 
@@ -151,12 +152,25 @@ def create_superblock(proposals, event_block_height, budget_max, sb_epoch_time):
             )
         )
 
-        # else add proposal and keep track of total budget allocation
-        budget_allocated += proposal.payment_amount
-
         payment = {'address': proposal.payment_address,
                    'amount': "{0:.8f}".format(proposal.payment_amount),
                    'proposal': "{}".format(proposal.object_hash)}
+
+        # calculate current sb data size
+        sb_temp = Superblock(
+            event_block_height=event_block_height,
+            payment_addresses='|'.join([pd['address'] for pd in payments]),
+            payment_amounts='|'.join([pd['amount'] for pd in payments]),
+            proposal_hashes='|'.join([pd['proposal'] for pd in payments])
+        )
+        data_size = len(sb_temp.sovd_serialise())
+
+        if data_size > maxgovobjdatasize:
+            printdbg("MAX_GOVERNANCE_OBJECT_DATA_SIZE limit reached!")
+            break
+
+        # else add proposal and keep track of total budget allocation
+        budget_allocated += proposal.payment_amount
         payments.append(payment)
 
     # don't create an empty superblock
@@ -179,55 +193,26 @@ def create_superblock(proposals, event_block_height, budget_max, sb_epoch_time):
     return sb
 
 
-# shims 'til we can fix the hiluxd side
-def SHIM_serialise_for_hiluxd(sentinel_hex):
-    from models import HILUXD_GOVOBJ_TYPES
+# shims 'til we can fix the JSON format
+def SHIM_serialise_for_sovd(sentinel_hex):
+    from models import GOVOBJ_TYPE_STRINGS
+
     # unpack
     obj = deserialise(sentinel_hex)
 
-    # shim for hiluxd
-    govtype = obj[0]
+    # shim for sovd
+    govtype_string = GOVOBJ_TYPE_STRINGS[obj['type']]
 
-    # add 'type' attribute
-    obj[1]['type'] = HILUXD_GOVOBJ_TYPES[govtype]
+    # superblock => "trigger" in sovd
+    if govtype_string == 'superblock':
+        govtype_string = 'trigger'
 
-    # superblock => "trigger" in hiluxd
-    if govtype == 'superblock':
-        obj[0] = 'trigger'
-
-    # hiluxd expects an array (even though there is only a 1:1 relationship between govobj->class)
-    obj = [obj]
+    # sovd expects an array (will be deprecated)
+    obj = [(govtype_string, obj,)]
 
     # re-pack
-    hiluxd_hex = serialise(obj)
-    return hiluxd_hex
-
-
-# shims 'til we can fix the hiluxd side
-def SHIM_deserialise_from_hiluxd(hiluxd_hex):
-    from models import HILUXD_GOVOBJ_TYPES
-
-    # unpack
-    obj = deserialise(hiluxd_hex)
-
-    # shim from hiluxd
-    # only one element in the array...
-    obj = obj[0]
-
-    # extract the govobj type
-    govtype = obj[0]
-
-    # superblock => "trigger" in hiluxd
-    if govtype == 'trigger':
-        obj[0] = govtype = 'superblock'
-
-    # remove redundant 'type' attribute
-    if 'type' in obj[1]:
-        del obj[1]['type']
-
-    # re-pack
-    sentinel_hex = serialise(obj)
-    return sentinel_hex
+    sovd_hex = serialise(obj)
+    return sovd_hex
 
 
 # convenience
@@ -251,7 +236,7 @@ def did_we_vote(output):
     err_msg = ''
 
     try:
-        detail = output.get('detail').get('hilux.conf')
+        detail = output.get('detail').get('sov.conf')
         result = detail.get('result')
         if 'errorMessage' in detail:
             err_msg = detail.get('errorMessage')

@@ -4,7 +4,6 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', 'lib'))
 import init
 import time
-import binascii
 import datetime
 import re
 import simplejson
@@ -12,7 +11,7 @@ from peewee import IntegerField, CharField, TextField, ForeignKeyField, DecimalF
 import peewee
 import playhouse.signals
 import misc
-import hiluxd
+import sovd
 from misc import (printdbg, is_numeric)
 import config
 from bitcoinrpc.authproxy import JSONRPCException
@@ -29,10 +28,13 @@ db.connect()
 
 
 # TODO: lookup table?
-HILUXD_GOVOBJ_TYPES = {
+SOVD_GOVOBJ_TYPES = {
     'proposal': 1,
     'superblock': 2,
-    'watchdog': 3,
+}
+GOVOBJ_TYPE_STRINGS = {
+    1: 'proposal',
+    2: 'trigger',  # it should be trigger here, not superblock
 }
 
 # schema version follows format 'YYYYMMDD-NUM'.
@@ -72,21 +74,24 @@ class GovernanceObject(BaseModel):
     class Meta:
         db_table = 'governance_objects'
 
-    # sync hiluxd gobject list with our local relational DB backend
+    # sync sovd gobject list with our local relational DB backend
     @classmethod
-    def sync(self, hiluxd):
-        golist = hiluxd.rpc_command('gobject', 'list')
+    def sync(self, sovd):
+        golist = sovd.rpc_command('gobject', 'list')
 
         # objects which are removed from the network should be removed from the DB
         try:
             for purged in self.purged_network_objects(list(golist.keys())):
                 # SOMEDAY: possible archive step here
                 purged.delete_instance(recursive=True, delete_nullable=True)
-
-            for item in golist.values():
-                (go, subobj) = self.import_gobject_from_hiluxd(hiluxd, item)
         except Exception as e:
-            printdbg("Got an error upon import: %s" % e)
+            printdbg("Got an error while purging: %s" % e)
+
+        for item in golist.values():
+            try:
+                (go, subobj) = self.import_gobject_from_sovd(sovd, item)
+            except Exception as e:
+                printdbg("Got an error upon import: %s" % e)
 
     @classmethod
     def purged_network_objects(self, network_object_hashes):
@@ -96,12 +101,12 @@ class GovernanceObject(BaseModel):
         return query
 
     @classmethod
-    def import_gobject_from_hiluxd(self, hiluxd, rec):
+    def import_gobject_from_sovd(self, sovd, rec):
         import decimal
-        import hiluxlib
-        import inflection
+        import sovlib
+        import binascii
+        import gobject_json
 
-        object_hex = rec['DataHex']
         object_hash = rec['Hash']
 
         gobj_dict = {
@@ -113,23 +118,26 @@ class GovernanceObject(BaseModel):
             'no_count': rec['NoCount'],
         }
 
-        # shim/hiluxd conversion
-        object_hex = hiluxlib.SHIM_deserialise_from_hiluxd(object_hex)
-        objects = hiluxlib.deserialise(object_hex)
+        # deserialise and extract object
+        json_str = binascii.unhexlify(rec['DataHex']).decode('utf-8')
+        dikt = gobject_json.extract_object(json_str)
+
         subobj = None
 
-        obj_type, dikt = objects[0:2:1]
-        obj_type = inflection.pluralize(obj_type)
-        subclass = self._meta.reverse_rel[obj_type].model_class
+        type_class_map = {
+            1: Proposal,
+            2: Superblock,
+        }
+        subclass = type_class_map[dikt['type']]
 
         # set object_type in govobj table
         gobj_dict['object_type'] = subclass.govobj_type
 
-        # exclude any invalid model data from hiluxd...
+        # exclude any invalid model data from sovd...
         valid_keys = subclass.serialisable_fields()
         subdikt = {k: dikt[k] for k in valid_keys if k in dikt}
 
-        # get/create, then sync vote counts from hiluxd, with every run
+        # get/create, then sync vote counts from sovd, with every run
         govobj, created = self.get_or_create(object_hash=object_hash, defaults=gobj_dict)
         if created:
             printdbg("govobj created = %s" % created)
@@ -138,19 +146,19 @@ class GovernanceObject(BaseModel):
             printdbg("govobj updated = %d" % count)
         subdikt['governance_object'] = govobj
 
-        # get/create, then sync payment amounts, etc. from hiluxd - Hiluxd is the master
+        # get/create, then sync payment amounts, etc. from sovd - Sovereignd is the master
         try:
             newdikt = subdikt.copy()
             newdikt['object_hash'] = object_hash
             if subclass(**newdikt).is_valid() is False:
-                govobj.vote_delete(hiluxd)
+                govobj.vote_delete(sovd)
                 return (govobj, None)
 
             subobj, created = subclass.get_or_create(object_hash=object_hash, defaults=subdikt)
         except Exception as e:
             # in this case, vote as delete, and log the vote in the DB
-            printdbg("Got invalid object from hiluxd! %s" % e)
-            govobj.vote_delete(hiluxd)
+            printdbg("Got invalid object from sovd! %s" % e)
+            govobj.vote_delete(sovd)
             return (govobj, None)
 
         if created:
@@ -162,9 +170,9 @@ class GovernanceObject(BaseModel):
         # ATM, returns a tuple w/gov attributes and the govobj
         return (govobj, subobj)
 
-    def vote_delete(self, hiluxd):
+    def vote_delete(self, sovd):
         if not self.voted_on(signal=VoteSignals.delete, outcome=VoteOutcomes.yes):
-            self.vote(hiluxd, VoteSignals.delete, VoteOutcomes.yes)
+            self.vote(sovd, VoteSignals.delete, VoteOutcomes.yes)
         return
 
     def get_vote_command(self, signal, outcome):
@@ -172,8 +180,8 @@ class GovernanceObject(BaseModel):
                signal.name, outcome.name]
         return cmd
 
-    def vote(self, hiluxd, signal, outcome):
-        import hiluxlib
+    def vote(self, sovd, signal, outcome):
+        import sovlib
 
         # At this point, will probably never reach here. But doesn't hurt to
         # have an extra check just in case objects get out of sync (people will
@@ -203,10 +211,10 @@ class GovernanceObject(BaseModel):
 
         vote_command = self.get_vote_command(signal, outcome)
         printdbg(' '.join(vote_command))
-        output = hiluxd.rpc_command(*vote_command)
+        output = sovd.rpc_command(*vote_command)
 
         # extract vote output parsing to external lib
-        voted = hiluxlib.did_we_vote(output)
+        voted = sovlib.did_we_vote(output)
 
         if voted:
             printdbg('VOTE success, saving Vote object to database')
@@ -214,11 +222,11 @@ class GovernanceObject(BaseModel):
                  object_hash=self.object_hash).save()
         else:
             printdbg('VOTE failed, trying to sync with network vote')
-            self.sync_network_vote(hiluxd, signal)
+            self.sync_network_vote(sovd, signal)
 
-    def sync_network_vote(self, hiluxd, signal):
-        printdbg('\tsyncing network vote for object %s with signal %s' % (self.object_hash, signal.name))
-        vote_info = hiluxd.get_my_gobject_votes(self.object_hash)
+    def sync_network_vote(self, sovd, signal):
+        printdbg('\tSyncing network vote for object %s with signal %s' % (self.object_hash, signal.name))
+        vote_info = sovd.get_my_gobject_votes(self.object_hash)
         for vdikt in vote_info:
             if vdikt['signal'] != signal.name:
                 continue
@@ -268,13 +276,16 @@ class Proposal(GovernanceClass, BaseModel):
     payment_amount = DecimalField(max_digits=16, decimal_places=8)
     object_hash = CharField(max_length=64)
 
-    govobj_type = HILUXD_GOVOBJ_TYPES['proposal']
+    # src/governance-validators.cpp
+    MAX_DATA_SIZE = 512
+
+    govobj_type = SOVD_GOVOBJ_TYPES['proposal']
 
     class Meta:
         db_table = 'proposals'
 
     def is_valid(self):
-        import hiluxlib
+        import sovlib
 
         printdbg("In Proposal#is_valid, for Proposal: %s" % self.__dict__)
 
@@ -304,14 +315,24 @@ class Proposal(GovernanceClass, BaseModel):
                 printdbg("\tProposal amount [%s] is negative or zero, returning False" % self.payment_amount)
                 return False
 
-            # payment address is valid base58 hilux addr, non-multisig
-            if not hiluxlib.is_valid_hilux_address(self.payment_address, config.network):
-                printdbg("\tPayment address [%s] not a valid Hilux address for network [%s], returning False" % (self.payment_address, config.network))
+            # payment address is valid base58 sov addr, non-multisig
+            if not sovlib.is_valid_sov_address(self.payment_address, config.network):
+                printdbg("\tPayment address [%s] not a valid Sovereign address for network [%s], returning False" % (self.payment_address, config.network))
                 return False
 
             # URL
             if (len(self.url.strip()) < 4):
                 printdbg("\tProposal URL [%s] too short, returning False" % self.url)
+                return False
+
+            # proposal URL has any whitespace
+            if (re.search(r'\s', self.url)):
+                printdbg("\tProposal URL [%s] has whitespace, returning False" % self.name)
+                return False
+
+            # Sovereign Core restricts proposals to 512 bytes max
+            if len(self.serialise()) > (self.MAX_DATA_SIZE * 2):
+                printdbg("\tProposal [%s] is too big, returning False" % self.name)
                 return False
 
             try:
@@ -329,7 +350,7 @@ class Proposal(GovernanceClass, BaseModel):
 
     def is_expired(self, superblockcycle=None):
         from constants import SUPERBLOCK_FUDGE_WINDOW
-        import hiluxlib
+        import sovlib
 
         if not superblockcycle:
             raise Exception("Required field superblockcycle missing.")
@@ -341,7 +362,7 @@ class Proposal(GovernanceClass, BaseModel):
         # half the SB cycle, converted to seconds
         # add the fudge_window in seconds, defined elsewhere in Sentinel
         expiration_window_seconds = int(
-            (hiluxlib.blocks_to_seconds(superblockcycle) / 2) +
+            (sovlib.blocks_to_seconds(superblockcycle) / 2) +
             SUPERBLOCK_FUDGE_WINDOW
         )
         printdbg("\texpiration_window_seconds = %s" % expiration_window_seconds)
@@ -356,15 +377,6 @@ class Proposal(GovernanceClass, BaseModel):
             return True
 
         printdbg("Leaving Proposal#is_expired, Expired = False")
-        return False
-
-    def is_deletable(self):
-        # end_date < (current_date - 30 days)
-        thirty_days = (86400 * 30)
-        if (self.end_epoch < (misc.now() - thirty_days)):
-            return True
-
-        # TBD (item moved to external storage/HiluxDrive, etc.)
         return False
 
     @classmethod
@@ -408,28 +420,6 @@ class Proposal(GovernanceClass, BaseModel):
             rank = self.governance_object.absolute_yes_count
             return rank
 
-    def get_prepare_command(self):
-        import hiluxlib
-        obj_data = hiluxlib.SHIM_serialise_for_hiluxd(self.serialise())
-
-        # new superblocks won't have parent_hash, revision, etc...
-        cmd = ['gobject', 'prepare', '0', '1', str(int(time.time())), obj_data]
-
-        return cmd
-
-    def prepare(self, hiluxd):
-        try:
-            object_hash = hiluxd.rpc_command(*self.get_prepare_command())
-            printdbg("Submitted: [%s]" % object_hash)
-            self.go.object_fee_tx = object_hash
-            self.go.save()
-
-            manual_submit = ' '.join(self.get_submit_command())
-            print(manual_submit)
-
-        except JSONRPCException as e:
-            print("Unable to prepare: %s" % e.message)
-
 
 class Superblock(BaseModel, GovernanceClass):
     governance_object = ForeignKeyField(GovernanceObject, related_name='superblocks', on_delete='CASCADE', on_update='CASCADE')
@@ -440,14 +430,14 @@ class Superblock(BaseModel, GovernanceClass):
     sb_hash = CharField()
     object_hash = CharField(max_length=64)
 
-    govobj_type = HILUXD_GOVOBJ_TYPES['superblock']
+    govobj_type = SOVD_GOVOBJ_TYPES['superblock']
     only_masternode_can_submit = True
 
     class Meta:
         db_table = 'superblocks'
 
     def is_valid(self):
-        import hiluxlib
+        import sovlib
         import decimal
 
         printdbg("In Superblock#is_valid, for SB: %s" % self.__dict__)
@@ -455,7 +445,7 @@ class Superblock(BaseModel, GovernanceClass):
         # it's a string from the DB...
         addresses = self.payment_addresses.split('|')
         for addr in addresses:
-            if not hiluxlib.is_valid_hilux_address(addr, config.network):
+            if not sovlib.is_valid_sov_address(addr, config.network):
                 printdbg("\tInvalid address [%s], returning False" % addr)
                 return False
 
@@ -487,14 +477,9 @@ class Superblock(BaseModel, GovernanceClass):
         printdbg("Leaving Superblock#is_valid, Valid = True")
         return True
 
-    def is_deletable(self):
-        # end_date < (current_date - 30 days)
-        # TBD (item moved to external storage/HiluxDrive, etc.)
-        pass
-
     def hash(self):
-        import hiluxlib
-        return hiluxlib.hashit(self.serialise())
+        import sovlib
+        return sovlib.hashit(self.serialise())
 
     def hex_hash(self):
         return "%x" % self.hash()
@@ -593,50 +578,6 @@ class Vote(BaseModel):
 
     class Meta:
         db_table = 'votes'
-
-
-class Watchdog(BaseModel, GovernanceClass):
-    governance_object = ForeignKeyField(GovernanceObject, related_name='watchdogs')
-    created_at = IntegerField()
-    object_hash = CharField(max_length=64)
-
-    govobj_type = HILUXD_GOVOBJ_TYPES['watchdog']
-    only_masternode_can_submit = True
-
-    @classmethod
-    def active(self, hiluxd):
-        now = int(time.time())
-        resultset = self.select().where(
-            self.created_at >= (now - hiluxd.SENTINEL_WATCHDOG_MAX_SECONDS)
-        )
-        return resultset
-
-    @classmethod
-    def expired(self, hiluxd):
-        now = int(time.time())
-        resultset = self.select().where(
-            self.created_at < (now - hiluxd.SENTINEL_WATCHDOG_MAX_SECONDS)
-        )
-        return resultset
-
-    def is_expired(self, hiluxd):
-        now = int(time.time())
-        return (self.created_at < (now - hiluxd.SENTINEL_WATCHDOG_MAX_SECONDS))
-
-    def is_valid(self, hiluxd):
-        if self.is_expired(hiluxd):
-            return False
-
-        return True
-
-    def is_deletable(self, hiluxd):
-        if self.is_expired(hiluxd):
-            return True
-
-        return False
-
-    class Meta:
-        db_table = 'watchdogs'
 
 
 class Transient(object):
@@ -746,8 +687,7 @@ def db_models():
         Superblock,
         Signal,
         Outcome,
-        Vote,
-        Watchdog
+        Vote
     ]
     return models
 
@@ -761,7 +701,7 @@ def check_db_sane():
     for model in db_models():
         if not getattr(model, 'table_exists')():
             missing_table_models.append(model)
-            printdbg("[warning]: table for %s (%s) doesn't exist in DB." % (model, model._meta.db_table))
+            printdbg("[warning]: Table for %s (%s) doesn't exist in DB." % (model, model._meta.db_table))
 
     if missing_table_models:
         printdbg("[warning]: Missing database tables. Auto-creating tables.")

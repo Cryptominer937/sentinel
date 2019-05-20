@@ -1,9 +1,9 @@
 #!/bin/bash
 set -evx
 
-mkdir ~/.hiluxcore
+mkdir ~/.sovcore
 
 # safety check
-if [ ! -f ~/.hiluxcore/.hilux.conf ]; then
-  cp share/hilux.conf.example ~/.hiluxcore/hilux.conf
+if [ ! -f ~/.sovcore/.sov.conf ]; then
+  cp share/sov.conf.example ~/.sovcore/sov.conf
 fi

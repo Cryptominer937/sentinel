@@ -8,30 +8,30 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..', 'lib'))
 sys.path.append(os.path.join(os.path.dirname(__file__), '..', '..'))
 import config
 
-from hiluxd import HiluxDaemon
-from hilux_config import HiluxConfig
+from sovd import SovereignDaemon
+from sov_config import SovereignConfig
 
 
-def test_hiluxd():
-    config_text = HiluxConfig.slurp_config_file(config.hilux_conf)
+def test_sovd():
+    config_text = SovereignConfig.slurp_config_file(config.sov_conf)
     network = 'mainnet'
     is_testnet = False
-    genesis_hash = u'000008876cc4a4550d368ec40f7a1e8a17b665f422be9c53266b51ca3ab8b1d1'
+    genesis_hash = u'0000093e6f9d658353d8def21d98a5a5126a388a7c5987bce7cac4ccf5299dd0'
     for line in config_text.split("\n"):
         if line.startswith('testnet=1'):
             network = 'testnet'
             is_testnet = True
             genesis_hash = u'00000bafbc94add76cb75e2ec92894837288a481e5c005f6563d91623bf8bc2c'
 
-    creds = HiluxConfig.get_rpc_creds(config_text, network)
-    hiluxd = HiluxDaemon(**creds)
-    assert hiluxd.rpc_command is not None
+    creds = SovereignConfig.get_rpc_creds(config_text, network)
+    sovd = SovereignDaemon(**creds)
+    assert sovd.rpc_command is not None
 
-    assert hasattr(hiluxd, 'rpc_connection')
+    assert hasattr(sovd, 'rpc_connection')
 
-    # Hilux testnet block 0 hash == 00000bafbc94add76cb75e2ec92894837288a481e5c005f6563d91623bf8bc2c
+    # Sovereign testnet block 0 hash == 00000bafbc94add76cb75e2ec92894837288a481e5c005f6563d91623bf8bc2c
     # test commands without arguments
-    info = hiluxd.rpc_command('getinfo')
+    info = sovd.rpc_command('getinfo')
     info_keys = [
         'blocks',
         'connections',
@@ -48,4 +48,4 @@ def test_hiluxd():
     assert info['testnet'] is is_testnet
 
     # test commands with args
-    assert hiluxd.rpc_command('getblockhash', 0) == genesis_hash
+    assert sovd.rpc_command('getblockhash', 0) == genesis_hash
